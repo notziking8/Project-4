@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://c6direfnky46c"]
 
 [ext_resource type="Script" uid="uid://cpmnxq3e7hgjx" path="res://scripts/enemies/enemy.gd" id="1_qty17"]
+[ext_resource type="PackedScene" uid="uid://nm65y6orwivw" path="res://scenes/enemies/mock_drop_item.tscn" id="2_pkqou"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_2r427"]
 radius = 20.0
@@ -8,6 +9,7 @@ radius = 20.0
 [node name="EnemyBase" type="CharacterBody2D" unique_id=773169292]
 motion_mode = 1
 script = ExtResource("1_qty17")
+drop_item_scene = ExtResource("2_pkqou")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2056644398]
 shape = SubResource("CircleShape2D_2r427")
