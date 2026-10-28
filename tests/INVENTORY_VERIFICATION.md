@@ -15,7 +15,9 @@ godot --headless --path . --script res://tests/solo_regression.gd
 godot --headless --path . --script res://tests/minotaur_regression.gd
 ```
 
-Open the project in Godot first to import assets on a fresh checkout. Restricted headless runs emitted a Windows certificate-store warning; all three suites completed successfully. No manual full campaign or visual playthrough was performed.
+Open the project in Godot first to import assets on a fresh checkout. Restricted headless runs emitted a Windows certificate-store warning; all three suites completed successfully.
+
+Michael Nearn subsequently confirmed manual testing of the Utility / Inventory system in Godot: everything worked correctly. This confirmation covers the mechanic; a full campaign playthrough was not reported.
 
 ## Demonstration
 
