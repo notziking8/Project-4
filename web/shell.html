@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1119">
+  <meta name="description" content="Explore a shifting Greek labyrinth, defeat its spirits, and survive the Minotaur's hunt. A free browser game.">
+  <title>$GODOT_PROJECT_NAME</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0b1119; color: #e6e3d5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1328px; margin: auto; padding: 20px 24px 32px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    h1 { margin: 0; color: #e9bf72; font: 600 clamp(20px, 3vw, 30px)/1.2 Georgia, serif; }
+    .subtitle { margin: 6px 0 0; font-size: 14px; color: #a6b4bb; }
+    button { padding: 10px 18px; border: 1px solid #8d7755; border-radius: 4px; background: #233139; color: #f2dfba; font: inherit; cursor: pointer; }
+    button:hover { background: #35464e; }
+    button:focus-visible, a:focus-visible { outline: 2px solid #79d7db; outline-offset: 4px; }
+    #stage { position: relative; aspect-ratio: 16/9; background: #090f17; border: 1px solid #514b3d; box-shadow: 0 14px 50px #0006; overflow: hidden; }
+    #stage:fullscreen { display: grid; place-items: center; border: 0; background: #000; }
+    canvas { display: block; width: 100%; height: 100%; object-fit: contain; outline: none; }
+    #stage:fullscreen canvas { width: min(100vw, 177.7778vh); height: min(100vh, 56.25vw); }
+    #overlay { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 18px; text-align: center; padding: 24px; background: radial-gradient(ellipse at center, #253139, #0b1119 70%); }
+    #overlay[hidden], progress[hidden] { display: none; }
+    #overlay h2 { color: #e9bf72; font: 600 clamp(22px, 4vw, 44px)/1.15 Georgia, serif; margin: 0; }
+    #status { margin: 0; max-width: 540px; color: #bac8cb; }
+    progress { width: min(320px, 80%); accent-color: #e9bf72; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 18px; font-size: 14px; color: #a6b4bb; }
+    kbd { color: #e6e3d5; font: 600 13px system-ui; }
+    footer { margin-top: 20px; font-size: 13px; color: #87959e; line-height: 1.6; }
+    a { color: #79d7db; }
+    @media (max-width: 700px) { main { padding: 14px 10px; } header { align-items: flex-start; } .subtitle { max-width: 240px; } }
+  </style>
+  $GODOT_HEAD_INCLUDE
+</head>
+<body data-game-status="idle">
+<main>
+  <header>
+    <div><h1>The Shifting Labyrinth</h1><p class="subtitle">162 chambers. One explorer. A maze that never rests.</p></div>
+    <button id="fullscreen" type="button">Fullscreen</button>
+  </header>
+  <section id="stage" aria-label="The Shifting Labyrinth game">
+    <canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Game canvas. Press Enter to play; H opens the field guide.">A browser with WebGL 2 is required.</canvas>
+    <div id="overlay">
+      <h2>Enter the labyrinth</h2>
+      <p id="status" role="status" aria-live="polite">Defeat the spirits. Unseal the Minotaur. Find your way home.<br>Play on a computer with a keyboard and mouse.</p>
+      <progress id="progress" hidden></progress>
+      <button id="launch" type="button">Launch game</button>
+    </div>
+  </section>
+  <div class="controls" aria-label="Game controls">
+    <span><kbd>WASD</kbd> Move</span><span><kbd>Mouse / hold click</kbd> Aim / shoot</span>
+    <span><kbd>F</kbd> Lock passage</span><span><kbd>E</kbd> Collect</span><span><kbd>R</kbd> Heal</span>
+    <span><kbd>Tab</kbd> Inventory</span><span><kbd>M</kbd> Map</span><span><kbd>H</kbd> Help</span>
+  </div>
+  <footer>Requires WebGL 2. Click the game to return keyboard focus. Progress lasts for this play session.
+    <a href="https://github.com/notziking8/Project-4" target="_blank" rel="noopener noreferrer">Project source</a></footer>
+</main>
+<noscript>This game requires JavaScript and WebAssembly.</noscript>
+<script src="$GODOT_URL"></script>
+<script>
+  const canvas = document.getElementById('canvas');
+  const launch = document.getElementById('launch');
+  const overlay = document.getElementById('overlay');
+  const status = document.getElementById('status');
+  const progress = document.getElementById('progress');
+  const config = $GODOT_CONFIG;
+  const engine = new Engine(config);
+  function showFailure(error) {
+    console.error(error);
+    document.body.dataset.gameStatus = 'error';
+    overlay.hidden = false;
+    progress.hidden = true;
+    status.textContent = 'Unable to start the game. Try a current Chrome, Edge, or Firefox browser with hardware acceleration enabled. ' + String(error.message || error);
+    launch.hidden = false;
+    launch.disabled = false;
+    launch.textContent = 'Reload';
+    launch.onclick = () => location.reload();
+  }
+  launch.onclick = async () => {
+    launch.disabled = true;
+    try {
+      const missing = Engine.getMissingFeatures({ threads: false });
+      if (missing.length) throw new Error('Missing: ' + missing.join(', '));
+      document.body.dataset.gameStatus = 'loading';
+      launch.hidden = true;
+      progress.hidden = false;
+      status.textContent = 'Loading the labyrinth…';
+      await engine.startGame({
+        canvas, canvasResizePolicy: 0,
+        onProgress(current, total) {
+          if (total > 0) { progress.max = total; progress.value = current; }
+          else progress.removeAttribute('value');
+        },
+        onExit() {
+          document.body.dataset.gameStatus = 'ended';
+          overlay.hidden = false;
+          progress.hidden = true;
+          status.textContent = 'Your session has ended.';
+          launch.hidden = false;
+          launch.disabled = false;
+          launch.textContent = 'Play again';
+          launch.onclick = () => location.reload();
+        }
+      });
+      overlay.hidden = true;
+      document.body.dataset.gameStatus = 'ready';
+      canvas.focus();
+    } catch (error) { showFailure(error); }
+  };
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
+  canvas.addEventListener('keydown', event => {
+    if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault();
+  });
+  document.getElementById('fullscreen').onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.getElementById('stage').requestFullscreen();
+      canvas.focus();
+    } catch (error) { status.textContent = 'Fullscreen is unavailable in this browser.'; }
+  };
+</script>
+</body>
+</html>

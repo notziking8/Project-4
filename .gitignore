@@ -1,0 +1,11 @@
+.godot/
+*.tmp
+build/
+.venv/
+__pycache__/
+export_credentials.cfg
+screenshots/
+# Keep the original art and maintained importer; exclude local experiments/downloads.
+work/*
+!work/generated/
+!work/polish_assets.py

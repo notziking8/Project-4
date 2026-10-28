@@ -1,0 +1,63 @@
+name: Build and deploy game
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download verified Godot and Web templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(cat .godot-version)"
+          base="https://github.com/godotengine/godot/releases/download/${version}-stable"
+          editor="Godot_v${version}-stable_linux.x86_64.zip"
+          templates="Godot_v${version}-stable_export_templates.tpz"
+          mkdir -p build/downloads "$HOME/.local/bin"
+          cd build/downloads
+          curl --fail --location --retry 3 --remote-name "$base/$editor"
+          curl --fail --location --retry 3 --remote-name "$base/$templates"
+          curl --fail --location --retry 3 --remote-name "$base/SHA512-SUMS.txt"
+          grep -F "$editor" SHA512-SUMS.txt | sha512sum --check
+          unzip -q "$editor" -d "$HOME/.local/bin"
+          mv "$HOME/.local/bin/Godot_v${version}-stable_linux.x86_64" "$HOME/.local/bin/godot"
+          chmod +x "$HOME/.local/bin/godot"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          cd ../..
+          python3 tools/install_web_templates.py "build/downloads/$templates" build/downloads/SHA512-SUMS.txt
+      - name: Test and export browser game
+        run: python3 tools/export_web.py --test
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy game
+        id: deployment
+        uses: actions/deploy-pages@v4
