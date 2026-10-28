@@ -30,6 +30,26 @@ const MINOTAUR_ATLAS := preload("res://assets/art/enemies/minotaur/minotaur_anim
 const OWL_ATLAS := preload("res://assets/art/characters/companion/owl_animation.png")
 const ATHENA_ATLAS := preload("res://assets/art/characters/companion/athena_reveal.png")
 const ICON_ATLAS := preload("res://assets/art/ui/item_icons.png")
+# Armor Types (Zion King). One table drives damage, speed, knockback and HUD.
+# reduction: general damage reduction. electric_resist: extra reduction to
+# electrical hits only, applied after general reduction. speed: multiplier on
+# the 4-unit/second base speed. knockback: whether ordinary hits push 0.5 unit.
+const ARMOR_KINDS := ["light", "medium", "heavy"]
+const ARMOR := {
+	"light": {"reduction": 0.15, "electric_resist": 0.0, "speed": 1.10, "knockback": true, "tint": Color("a9c3a0")},
+	"medium": {"reduction": 0.35, "electric_resist": 0.25, "speed": 1.00, "knockback": true, "tint": Color("9fb6cc")},
+	"heavy": {"reduction": 0.60, "electric_resist": 0.0, "speed": 0.85, "knockback": false, "tint": Color("d9a85c")},
+}
+const BASE_SPEED_UNITS := 4.0
+const KNOCKBACK_UNITS := 0.5
+# Remnants of earlier challengers: loose armor in rooms per sector (room, kind).
+const ARMOR_REMNANTS := [
+	[[Vector2i(3,2), "light"], [Vector2i(0,6), "medium"]],
+	[[Vector2i(3,2), "medium"], [Vector2i(0,6), "heavy"]],
+	[[Vector2i(3,2), "light"], [Vector2i(0,6), "heavy"]],
+]
+const CHEST_CONTENTS := ["medium", "heavy", "medium"]
+const SHRINE_REWARDS := ["medium", "heavy", "heavy"]
 
 var mode := "menu"
 var player_pos := Vector2(224,224)
@@ -44,6 +64,7 @@ var checkpoint := -1
 var checkpoints := [Vector2(2144,1760), Vector2(4448,1760), Vector2(6752,1760)]
 var gates := [false, false]
 var shrine_rewards := [false, false, false]
+var opened_chests := []
 var pickups := []
 var enemies := []
 var walls := []
@@ -211,11 +232,16 @@ func build_level() -> void:
 	walls = maze.blockers
 	pickups = []
 	enemies = []
+	opened_chests = []
 	for sector in range(3):
 		var offset := sector * SECTOR_WIDTH
 		for point in [Vector2(300,224),Vector2(992,992),Vector2(1760,2912),Vector2(2144,2144)]:
 			pickups.append({"kind":"relic","pos":point+Vector2(offset,0),"locked":false,"sector":sector})
-		pickups.append({"kind":"heavy" if sector==1 else "medium","pos":Vector2(offset+2070,1850),"locked":true,"sector":sector})
+		# Sealed stone chest: opens once every enemy in its sector is defeated.
+		pickups.append({"kind":CHEST_CONTENTS[sector],"pos":Vector2(offset+2070,1850),"locked":true,"sector":sector,"chest":true})
+		for remnant in ARMOR_REMNANTS[sector]:
+			var room_center := Vector2(remnant[0])*384.0+Vector2(224+offset,224)
+			pickups.append({"kind":remnant[1],"pos":room_center+Vector2(-40,40),"locked":false,"sector":sector,"remnant":true})
 		var rooms := [Vector2i(1,0),Vector2i(2,2),Vector2i(4,1),Vector2i(1,4),Vector2i(3,5),Vector2i(4,7),Vector2i(2,8),Vector2i(5,6)]
 		for i in range(rooms.size()):
 			var point := Vector2(rooms[i])*384.0+Vector2(224+offset,224)
@@ -302,9 +328,7 @@ func update_game(delta: float) -> void:
 	motion.x = float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A))
 	motion.y = float(Input.is_key_pressed(KEY_S)) - float(Input.is_key_pressed(KEY_W))
 	if motion.length_squared() > 1.0: motion = motion.normalized()
-	var speed := 4.0 * UNIT
-	if equipped == "light": speed *= 1.1
-	elif equipped == "heavy": speed *= 0.85
+	var speed := move_speed()
 	var old_pos: Vector2 = player_pos
 	player_pos = move_body(old_pos, motion * speed * delta, 16.0)
 	update_player_pose(player_pos-old_pos)
@@ -453,24 +477,47 @@ func closest_nav_cell(pos: Vector2) -> Vector2i:
 				if nav.is_in_boundsv(candidate) and not nav.is_point_solid(candidate): return candidate
 	return cell
 
+func armor_stats(kind: String = "") -> Dictionary:
+	if kind.is_empty(): kind = equipped
+	return ARMOR.get(kind, ARMOR["light"])
+
+func move_speed() -> float:
+	# Base 4 units/second: light 4.4, medium 4.0, heavy 3.4.
+	return BASE_SPEED_UNITS * float(armor_stats().speed) * UNIT
+
+func armor_damage(base: float, electrical: bool) -> float:
+	# General reduction first, then electrical resistance on electrical hits only.
+	# Fractions are kept: a 20-point electrical hit in medium armor deals 9.75.
+	var stats := armor_stats()
+	var amount := base * (1.0 - float(stats.reduction))
+	if electrical: amount *= 1.0 - float(stats.electric_resist)
+	return amount
+
 func take_damage(base: float, electrical: bool, attacker: Vector2) -> void:
 	hurt_anim_left = 0.20
-	var reduction := 0.15 if equipped == "light" else (0.35 if equipped == "medium" else 0.60)
-	var amount := base * (1.0 - reduction)
-	if electrical and equipped == "medium": amount *= 0.75
-	health -= amount
-	if equipped != "heavy":
-		var push: Vector2 = (player_pos - attacker).normalized() * (0.5 * UNIT)
+	health -= armor_damage(base, electrical)
+	if armor_stats().knockback:
+		var push: Vector2 = (player_pos - attacker).normalized() * (KNOCKBACK_UNITS * UNIT)
 		player_pos = move_body(player_pos, push, 19.0)
 	if health <= 0.0: respawn()
 
 func respawn() -> void:
 	var death_pos: Vector2 = player_pos
+	# Keep the equipped suit; every unequipped backup suit (including a second
+	# copy of the equipped kind) is left at the death location.
+	var kept_equipped := false
+	for i in range(inventory.size()):
+		if inventory[i] == equipped and not kept_equipped:
+			kept_equipped = true
+			continue
+		if inventory[i] in ARMOR_KINDS: inventory[i] = "_drop_" + inventory[i]
+	var dropped := 0
 	for i in range(inventory.size() - 1, -1, -1):
 		var item: String = inventory[i]
-		if item in ["light", "medium", "heavy"] and item != equipped:
-			pickups.append({"kind": item, "pos": death_pos + Vector2(20 * i, 0), "locked": false, "sector": -1})
+		if item.begins_with("_drop_"):
+			pickups.append({"kind": item.trim_prefix("_drop_"), "pos": death_pos + Vector2(20 * dropped, 0), "locked": false, "sector": -1})
 			inventory.remove_at(i)
+			dropped += 1
 	health = 100.0
 	heal_cooldown = 0.0
 	shot_cooldown = 0.0
@@ -539,7 +586,7 @@ func update_shrines() -> void:
 				build_navigation()
 			if not shrine_rewards[i]:
 				shrine_rewards[i] = true
-				pickups.append({"kind": ["medium", "heavy", "heavy"][i], "pos": checkpoints[i] + Vector2(75, 35), "locked": false, "sector": -1})
+				pickups.append({"kind": SHRINE_REWARDS[i], "pos": checkpoints[i] + Vector2(75, 35), "locked": false, "sector": -1, "reward": true})
 			if i == 2:
 				mode = "reveal"
 				ending_time = 7.0
@@ -673,6 +720,10 @@ func defeat_enemy(enemy: Dictionary) -> void:
 	enemy["pursuing"] = false
 	var drop := "heavy" if enemy["elite"] else ("medium" if enemy["boss"] else "weapon")
 	pickups.append({"kind": drop, "pos": enemy["pos"], "locked": false, "sector": -1})
+	if not enemy["boss"] and sector_clear(enemy["sector"]):
+		for pickup in pickups:
+			if pickup.get("chest", false) and pickup["sector"] == enemy["sector"]:
+				show_message("A sealed stone chest grinds open in %s." % SECTOR_NAMES[enemy["sector"]])
 	if enemy["boss"]: show_message("The bull court falls silent.")
 	else: update_boss_unlock()
 
@@ -691,20 +742,27 @@ func pick_up() -> void:
 	var player: Vector2 = player_pos
 	var best := -1
 	var best_distance := 92.0
+	var sealed_nearby := false
 	for i in range(pickups.size()):
 		var pickup: Dictionary = pickups[i]
-		if pickup["locked"] and not sector_clear(pickup["sector"]): continue
 		var distance := player.distance_to(pickup["pos"])
+		if pickup["locked"] and not sector_clear(pickup["sector"]):
+			if distance < best_distance: sealed_nearby = true
+			continue
 		if distance < best_distance:
 			best = i
 			best_distance = distance
-	if best < 0: return
+	if best < 0:
+		if sealed_nearby: show_message("The stone chest is sealed. Defeat every spirit in this sector.")
+		return
 	var kind: String = pickups[best]["kind"]
 	if used_slots() + item_cost(kind) > 10:
 		show_message("The satchel is full.")
 		return
 	inventory.append(kind)
+	if pickups[best].get("chest", false): opened_chests.append(pickups[best]["pos"])
 	pickups.remove_at(best)
+	if kind in ARMOR_KINDS: show_message("%s armor stowed. Equip it at an activated shrine." % kind.capitalize())
 
 func heal() -> void:
 	if health >= 100.0 or heal_cooldown > 0.0: return
@@ -714,14 +772,27 @@ func heal() -> void:
 	health = minf(100.0, health + 25.0)
 	heal_cooldown = 5.0
 
+func near_activated_shrine() -> bool:
+	# Any shrine the explorer has already activated counts, not only the latest.
+	for i in range(checkpoint + 1):
+		if player_pos.distance_to(checkpoints[i]) <= 105.0: return true
+	return false
+
 func at_active_shrine() -> bool:
-	if checkpoint < 0 or combat_active(): return false
-	return player_pos.distance_to(checkpoints[checkpoint]) <= 105.0
+	return near_activated_shrine() and not combat_active()
 
 func equip_selected() -> void:
-	if not at_active_shrine() or selected_item < 0 or selected_item >= inventory.size(): return
+	if selected_item < 0 or selected_item >= inventory.size(): return
 	var kind: String = inventory[selected_item]
-	if kind in ["light", "medium", "heavy"]: equipped = kind
+	if kind not in ARMOR_KINDS or kind == equipped: return
+	if not near_activated_shrine():
+		show_message("Armor can only be changed at an activated shrine.")
+		return
+	if combat_active():
+		show_message("Not during combat. Lose your pursuers, then change armor.")
+		return
+	equipped = kind
+	show_message("%s armor equipped." % kind.capitalize())
 
 func drop_selected() -> void:
 	if not at_active_shrine() or selected_item < 0 or selected_item >= inventory.size(): return
@@ -852,10 +923,25 @@ func draw_world() -> void:
 			for y in range(int(rect.position.y)+10,int(rect.end.y)-5,24):
 				draw_line(Vector2(rect.get_center().x-17,y),Vector2(rect.get_center().x+17,y),GOLD.darkened(0.3),3)
 	for i in range(3): draw_shrine(i)
+	for chest_pos in opened_chests:
+		draw_texture_rect_region(ICON_ATLAS,Rect2(chest_pos-Vector2(24,32),Vector2(48,48)),Rect2(7*32,0,32,32),Color(0.45,0.45,0.45))
 	for pickup in pickups:
-		if pickup["locked"] and not sector_clear(pickup["sector"]):
-			draw_texture_rect_region(ICON_ATLAS,Rect2(pickup["pos"]-Vector2(24,32),Vector2(48,48)),Rect2(7*32,0,32,32))
+		if not visible.has_point(pickup["pos"]): continue
+		if pickup.get("chest", false):
+			var sealed: bool = pickup["locked"] and not sector_clear(pickup["sector"])
+			draw_texture_rect_region(ICON_ATLAS,Rect2(pickup["pos"]-Vector2(24,32),Vector2(48,48)),Rect2(7*32,0,32,32),Color(0.7,0.7,0.75) if sealed else Color.WHITE)
+			if sealed:
+				draw_line(pickup["pos"]+Vector2(-20,-14),pickup["pos"]+Vector2(20,-14),GOLD.darkened(0.45),3)
+			else:
+				var bob := sin(anim_clock*3.0)*3.0
+				draw_icon(pickup["kind"], pickup["pos"]+Vector2(0,-46+bob), 0.8)
 		else:
+			if pickup.get("remnant", false):
+				# Scattered bones and dust mark armor left by an earlier challenger.
+				for n in range(5):
+					draw_rect(Rect2(pickup["pos"]+Vector2(-26+n*12,14+(n%2)*4),Vector2(7,3)),Color(0.85,0.82,0.7,0.55))
+			if pickup["kind"] in ARMOR_KINDS:
+				draw_arc(pickup["pos"],26+sin(anim_clock*2.5)*2.0,0,TAU,24,Color(armor_stats(pickup["kind"]).tint,0.55),1.5)
 			draw_icon(pickup["kind"], pickup["pos"], 1.0)
 	for enemy in enemies:
 		if enemy["alive"] and visible.has_point(enemy.pos): draw_enemy(enemy)
@@ -930,6 +1016,12 @@ func draw_enemy(enemy: Dictionary) -> void:
 		pos.y += sin(anim_clock*2.4+enemy.phase)*1.5
 		var enemy_size := 78.0 if heavy else 64.0
 		draw_texture_rect_region(SPIRIT_ATLAS, Rect2((pos - Vector2(enemy_size * 0.5, enemy_size * 61.0 / 64.0)).round(), Vector2(enemy_size, enemy_size)), Rect2(frame * 64, 0, 64, 64))
+	if enemy["electrical"] and not boss:
+		# Electrical Light spirits crackle so players know medium armor resists them.
+		var spark := int(anim_clock*10.0+enemy.phase*5.0)
+		for n in range(2):
+			var a := pos+Vector2(-14+n*24, -50+((spark+n)%3)*8)
+			draw_polyline(PackedVector2Array([a,a+Vector2(5,6),a+Vector2(1,10),a+Vector2(7,16)]),CYAN,1.5)
 	if enemy.state == "attack":
 		draw_arc(enemy.pos,30,0,TAU,24,RED,3)
 	if enemy["hp"] < (50.0 if not heavy else 100.0) or boss:
@@ -947,7 +1039,8 @@ func draw_player() -> void:
 	draw_set_transform((size*0.5-camera).round())
 	var tint := Color(1.0,0.65,0.6) if hurt_anim_left>0.0 else Color.WHITE
 	draw_texture_rect_region(texture,Rect2(pos-Vector2(32,60),Vector2(64,64)),source,tint)
-	draw_arc(pos,21,0.15,PI-0.15,24,CYAN,1.5)
+	# The ring under the explorer shows the equipped armor's colour; heavy is thicker.
+	draw_arc(pos,21,0.15,PI-0.15,24,armor_stats().tint,3.0 if equipped == "heavy" else 1.5)
 	draw_bow(player_pos,aim,clampf(1.0-attack_anim_left/0.25,0,1))
 
 func draw_bow(pos: Vector2, direction: Vector2, phase: float) -> void:
@@ -1083,9 +1176,10 @@ func draw_help() -> void:
 		"F locks the passage under your cursor in its CURRENT state for 10 seconds. Keep an open route open, or keep a closed route closed. Aim within three tiles. Cyan sockets show the lock; it then recharges for 5 seconds.",
 		"Follow the gold trail and the live directions at the top. M opens the full map. G toggles the trail. Red map marks your current objective; gold marks shrines; cyan marks you.",
 		"WASD moves. Aim at a spirit's body and hold left click to fire arrows from the bow. Spirits investigate noise, pursue through passages and search where they last saw you. Move out of red attack rings.",
-		"E collects items. R consumes a healing relic. Tab opens inventory: click armor to equip, or press X to drop the selected item, at an activated shrine outside combat. H closes this guide. Escape pauses."
+		"E collects items. R consumes a healing relic. Tab opens inventory: click armor to equip, or press X to drop the selected item, at an activated shrine outside combat. H closes this guide. Escape pauses.",
+		"Armor: Light cuts damage 15% and adds 10% speed. Medium cuts 35% and resists crackling electric spirits. Heavy cuts 60% and stops knockback but slows you 15%. Each shrine grants one suit; sealed chests open when their sector is cleared."
 	]
-	for i in range(paragraphs.size()): wrapped_label(paragraphs[i],origin+Vector2(0,44+i*75),880,17,PALE,3)
+	for i in range(paragraphs.size()): wrapped_label(paragraphs[i],origin+Vector2(0,44+i*70),880,17,PALE,3)
 
 func draw_full_map() -> void:
 	draw_rect(Rect2(Vector2.ZERO,size),Color(0.01,0.02,0.04,0.96))
@@ -1112,6 +1206,15 @@ func draw_hud() -> void:
 	label("WASD Move   Hold click Fire   F Lock passage   E Collect   R Heal   Tab Inventory   M Map   H Help",Vector2(26,size.y-20),14,Color("a0aca8"))
 	draw_rect(Rect2(16, 14, 304, 112), Color(0.04, 0.07, 0.12, 0.88))
 	label("The Explorer", Vector2(34,42),22,CYAN)
+	# Equipped armor: icon plus a protection bar (reduction) and a speed tick.
+	draw_icon(equipped, Vector2(286, 34), 0.62)
+	draw_arc(Vector2(286, 34), 14, 0, TAU, 20, armor_stats().tint, 2)
+	draw_rect(Rect2(230, 24, 30, 4), Color("465260"))
+	draw_rect(Rect2(230, 24, 30.0 * float(armor_stats().reduction) / 0.6, 4), armor_stats().tint)
+	draw_rect(Rect2(230, 32, 30, 4), Color("465260"))
+	draw_rect(Rect2(230, 32, 30.0 * (float(armor_stats().speed) - 0.75) / 0.4, 4), PALE)
+	if near_activated_shrine() and mode == "playing":
+		draw_arc(Vector2(286, 34), 18, 0, TAU, 20, Color(CYAN, 0.5 + 0.5 * sin(anim_clock * 4.0)), 1.5)
 	label("Health", Vector2(34, 69), 16)
 	draw_rect(Rect2(104, 55, 190, 18), Color("3d4552"))
 	draw_rect(Rect2(104, 55, 190.0 * health / 100.0, 18), RED if health < 35 else CYAN)
