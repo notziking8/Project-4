@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://bvnisjdtst1hg"]
+
+[ext_resource type="PackedScene" uid="uid://c6direfnky46c" path="res://scenes/enemies/enemy_base.tscn" id="1_hy3v8"]
+
+[node name="EnemyBase" unique_id=773169292 instance=ExtResource("1_hy3v8")]
+enemy_type = 1
+
+[node name="ColorRect" parent="." index="3" unique_id=1300194953]
+offset_left = -24.0
+offset_top = -24.0
+offset_right = 24.0
+offset_bottom = 24.0
+color = Color(0.84313726, 0.13725491, 0.12941177, 1)
