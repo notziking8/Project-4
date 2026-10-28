@@ -1,0 +1,54 @@
+[gd_scene format=3 uid="uid://ckmb884q7rfh8"]
+
+[ext_resource type="Script" uid="uid://bk6jvr8pls84y" path="res://scripts/enemies/mock_player.gd" id="1_yycev"]
+[ext_resource type="PackedScene" uid="uid://b4a56iyefui3u" path="res://scenes/enemies/light_spirit.tscn" id="2_2g6wp"]
+[ext_resource type="PackedScene" uid="uid://bvnisjdtst1hg" path="res://scenes/enemies/heavy_spirit.tscn" id="3_huq1g"]
+
+[sub_resource type="NavigationPolygon" id="NavigationPolygon_tedg7"]
+vertices = PackedVector2Array(520, 483, 1011.8125, 591.02344, 9.9609375, 593.96875, 468, 483, 1003.1719, 104.02344, 520, 213, 8.03125, 106.96875, 468, 213)
+polygons = Array[PackedInt32Array]([PackedInt32Array(0, 1, 2, 3), PackedInt32Array(4, 1, 0, 5), PackedInt32Array(6, 4, 5, 7), PackedInt32Array(3, 2, 6, 7)])
+outlines = Array[PackedVector2Array]([PackedVector2Array(-2, 97, 0, 604, 1022, 601, 1013, 94)])
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_2r427"]
+size = Vector2(32, 250)
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_2r427"]
+radius = 16.0
+
+[node name="EnemyTestScene" type="Node2D" unique_id=134948968]
+
+[node name="NavigationRegion2D" type="NavigationRegion2D" parent="." unique_id=1800058955]
+navigation_polygon = SubResource("NavigationPolygon_tedg7")
+
+[node name="StaticBody2D" type="StaticBody2D" parent="NavigationRegion2D" unique_id=1593056648]
+position = Vector2(494, 348)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="NavigationRegion2D/StaticBody2D" unique_id=327016124]
+shape = SubResource("RectangleShape2D_2r427")
+
+[node name="ColorRect" type="ColorRect" parent="NavigationRegion2D/StaticBody2D" unique_id=2078127675]
+offset_left = -16.0
+offset_top = -125.0
+offset_right = 16.0
+offset_bottom = 125.0
+
+[node name="MockPlayer" type="CharacterBody2D" parent="." unique_id=501157353]
+position = Vector2(180, 340)
+motion_mode = 1
+script = ExtResource("1_yycev")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="MockPlayer" unique_id=1178188415]
+shape = SubResource("CircleShape2D_2r427")
+
+[node name="ColorRect" type="ColorRect" parent="MockPlayer" unique_id=1945575998]
+offset_left = -12.0
+offset_top = -12.0
+offset_right = 12.0
+offset_bottom = 12.0
+color = Color(0.08235294, 0.8627451, 0, 1)
+
+[node name="EnemyBase" parent="." unique_id=773169292 instance=ExtResource("2_2g6wp")]
+position = Vector2(795, 227)
+
+[node name="EnemyBase2" parent="." unique_id=1107123374 instance=ExtResource("3_huq1g")]
+position = Vector2(797, 403)

@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://c6direfnky46c"]
+
+[ext_resource type="Script" uid="uid://cpmnxq3e7hgjx" path="res://scripts/enemies/enemy.gd" id="1_qty17"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_2r427"]
+radius = 20.0
+
+[node name="EnemyBase" type="CharacterBody2D" unique_id=773169292]
+motion_mode = 1
+script = ExtResource("1_qty17")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2056644398]
+shape = SubResource("CircleShape2D_2r427")
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="." unique_id=639662972]
+
+[node name="RayCast2D" type="RayCast2D" parent="." unique_id=930851448]
+
+[node name="ColorRect" type="ColorRect" parent="." unique_id=1300194953]
+offset_left = -16.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = 16.0
+color = Color(0.27450982, 1, 1, 1)
