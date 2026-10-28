@@ -1,6 +1,7 @@
 extends Control
 
 const UNIT := 64.0
+const INVENTORY_CAPACITY := 10
 const WORLD := Vector2(6976, 3520)
 const SHIFT_INTERVAL := 6.0
 const SECTOR_WIDTH := 2304.0
@@ -213,7 +214,7 @@ func build_level() -> void:
 	enemies = []
 	for sector in range(3):
 		var offset := sector * SECTOR_WIDTH
-		for point in [Vector2(300,224),Vector2(992,992),Vector2(1760,2912),Vector2(2144,2144)]:
+		for point in [Vector2(992,992),Vector2(1760,2912)]:
 			pickups.append({"kind":"relic","pos":point+Vector2(offset,0),"locked":false,"sector":sector})
 		pickups.append({"kind":"heavy" if sector==1 else "medium","pos":Vector2(offset+2070,1850),"locked":true,"sector":sector})
 		var rooms := [Vector2i(1,0),Vector2i(2,2),Vector2i(4,1),Vector2i(1,4),Vector2i(3,5),Vector2i(4,7),Vector2i(2,8),Vector2i(5,6)]
@@ -466,11 +467,14 @@ func take_damage(base: float, electrical: bool, attacker: Vector2) -> void:
 
 func respawn() -> void:
 	var death_pos: Vector2 = player_pos
+	# Identical suits are interchangeable; retain exactly one equipped suit.
+	var equipped_index := inventory.find(equipped)
 	for i in range(inventory.size() - 1, -1, -1):
 		var item: String = inventory[i]
-		if item in ["light", "medium", "heavy"] and item != equipped:
-			pickups.append({"kind": item, "pos": death_pos + Vector2(20 * i, 0), "locked": false, "sector": -1})
+		if item in ["light", "medium", "heavy"] and i != equipped_index:
+			pickups.append({"kind": item, "pos": death_pos, "locked": false, "sector": -1})
 			inventory.remove_at(i)
+	selected_item = -1
 	health = 100.0
 	heal_cooldown = 0.0
 	shot_cooldown = 0.0
@@ -688,6 +692,7 @@ func used_slots() -> int:
 	return result
 
 func pick_up() -> void:
+	if mode != "playing" or health <= 0.0: return
 	var player: Vector2 = player_pos
 	var best := -1
 	var best_distance := 92.0
@@ -700,23 +705,26 @@ func pick_up() -> void:
 			best_distance = distance
 	if best < 0: return
 	var kind: String = pickups[best]["kind"]
-	if used_slots() + item_cost(kind) > 10:
+	if used_slots() + item_cost(kind) > INVENTORY_CAPACITY:
 		show_message("The satchel is full.")
 		return
 	inventory.append(kind)
 	pickups.remove_at(best)
 
 func heal() -> void:
-	if health >= 100.0 or heal_cooldown > 0.0: return
+	if mode != "playing" or health <= 0.0 or health >= 100.0 or heal_cooldown > 0.0: return
 	var index := inventory.find("relic")
 	if index < 0: return
 	inventory.remove_at(index)
+	selected_item = -1
 	health = minf(100.0, health + 25.0)
 	heal_cooldown = 5.0
 
 func at_active_shrine() -> bool:
-	if checkpoint < 0 or combat_active(): return false
-	return player_pos.distance_to(checkpoints[checkpoint]) <= 105.0
+	if mode != "playing" or health <= 0.0 or checkpoint < 0 or combat_active(): return false
+	for i in range(checkpoint + 1):
+		if player_pos.distance_to(checkpoints[i]) <= 105.0: return true
+	return false
 
 func equip_selected() -> void:
 	if not at_active_shrine() or selected_item < 0 or selected_item >= inventory.size(): return
@@ -726,8 +734,8 @@ func equip_selected() -> void:
 func drop_selected() -> void:
 	if not at_active_shrine() or selected_item < 0 or selected_item >= inventory.size(): return
 	var kind: String = inventory[selected_item]
-	if kind == equipped or (kind == "weapon" and inventory.count("weapon") <= 1): return
-	pickups.append({"kind": kind, "pos": player_pos + Vector2(55, 0), "locked": false, "sector": -1})
+	if selected_item == inventory.find(equipped) or (kind == "weapon" and inventory.count("weapon") <= 1): return
+	pickups.append({"kind": kind, "pos": player_pos, "locked": false, "sector": -1})
 	inventory.remove_at(selected_item)
 	selected_item = -1
 
@@ -768,7 +776,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			inventory_open = not inventory_open
 			get_viewport().set_input_as_handled()
 		KEY_X:
-			drop_selected()
+			if inventory_open and not help_open and not map_open: drop_selected()
 
 func _gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT): return
@@ -785,13 +793,12 @@ func _gui_input(event: InputEvent) -> void:
 	elif mode == "playing":
 		if help_open or map_open: return
 		if inventory_open and Rect2(size.x - 330, 98, 300, 460).has_point(p):
-			var row := int((p.y - 136.0) / 44.0)
-			var column := 0 if p.x < size.x - 180.0 else 1
-			var index := row * 2 + column
-			if index >= 0 and index < inventory.size():
-				selected_item = index
-				equip_selected()
-		else: shoot()
+			for index in range(inventory.size()):
+				if inventory_item_rect(index).has_point(p):
+					selected_item = index
+					equip_selected()
+					break
+		elif not inventory_open: shoot()
 
 func _draw() -> void:
 	var screen := size
@@ -1116,7 +1123,7 @@ func draw_hud() -> void:
 	draw_rect(Rect2(104, 55, 190, 18), Color("3d4552"))
 	draw_rect(Rect2(104, 55, 190.0 * health / 100.0, 18), RED if health < 35 else CYAN)
 	label("Slots", Vector2(34, 105), 16)
-	for i in range(10):
+	for i in range(INVENTORY_CAPACITY):
 		draw_rect(Rect2(104 + i * 19, 92, 14, 13), GOLD if i < used_slots() else Color("465260"))
 	# Cooldown indicators remain graphical.
 	draw_rect(Rect2(335, 22, 90, 5), Color("465260"))
@@ -1139,6 +1146,9 @@ func draw_hud() -> void:
 				draw_icon(pickup["kind"], screen_pos + Vector2(0, -39), 0.55)
 				break
 
+func inventory_item_rect(index: int) -> Rect2:
+	return Rect2(size.x - 317.0 + float(index % 2) * 143.0, 139.0 + floori(float(index) / 2.0) * 44.0, 128, 38)
+
 func draw_inventory() -> void:
 	var x := size.x - 330.0
 	draw_rect(Rect2(x, 98, 300, 460), Color(0.04, 0.07, 0.12, 0.94))
@@ -1147,9 +1157,9 @@ func draw_inventory() -> void:
 	for i in range(inventory.size()):
 		var y := 158.0 + floori(float(i) / 2.0) * 44.0
 		var item_x := x + 38.0 + float(i % 2) * 143.0
-		if i == selected_item: draw_rect(Rect2(item_x - 25, y - 19, 128, 38), Color(0.28, 0.4, 0.48, 0.55))
+		if i == selected_item: draw_rect(inventory_item_rect(i), Color(0.28, 0.4, 0.48, 0.55))
 		draw_icon(inventory[i], Vector2(item_x, y), 0.55)
-		if inventory[i] == equipped: draw_arc(Vector2(item_x, y), 17, 0, TAU, 20, GOLD, 2)
+		if i == inventory.find(equipped) or i == inventory.find("weapon"): draw_arc(Vector2(item_x, y), 17, 0, TAU, 20, GOLD, 2)
 	# The fixed legend is the only textual equipment list.
 	var legend_y := 389.0
 	var legend := ["Light Armor", "Medium Armor", "Heavy Armor", "Weapon", "Healing Relic"]
