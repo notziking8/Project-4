@@ -159,6 +159,55 @@ func run() -> void:
 	# Slot costs: light 2, medium 3, heavy 4.
 	check(g.item_cost("light") == 2 and g.item_cost("medium") == 3 and g.item_cost("heavy") == 4, "Armor slot costs")
 
+	# Suit artwork: 32x32 icons and 256x64 worn sheets (four 64x64 facings) per armor type.
+	for kind in g.ARMOR_KINDS:
+		check(g.ARMOR_ICONS[kind].get_size() == Vector2(32, 32), "%s icon is 32x32" % kind)
+		check(g.ARMOR_WORN[kind].get_size() == Vector2(256, 64), "%s worn sheet has four 64x64 facings" % kind)
+
+	# Storm Vessel spark: electrical hits only, and only in medium armor.
+	g.inventory = ["weapon", "light", "medium", "heavy"]
+	g.equipped = "medium"
+	g.clear_armor_fx()
+	g.player_pos = Vector2(224, 224)
+	g.take_damage(20.0, false, Vector2(124, 224))
+	check(g.spark_left == 0.0, "Ordinary hit does not spark the medium channel")
+	g.take_damage(20.0, true, Vector2(124, 224))
+	check(g.spark_left > 0.0, "Electrical hit sparks the medium channel")
+	g.update_armor_fx(1.0)
+	check(g.spark_left == 0.0, "Spark goes dark again")
+	g.equipped = "light"
+	g.take_damage(10.0, true, Vector2(124, 224))
+	check(g.spark_left == 0.0, "Electrical hit in light armor does not spark")
+
+	# Bull's Stance: hit jolts the drawn suit, damages, and leaves the body planted.
+	g.equipped = "heavy"
+	g.health = 100.0
+	g.player_pos = Vector2(224, 224)
+	g.take_damage(20.0, false, Vector2(124, 224))
+	check(g.jolt_left > 0.0 and g.player_pos == Vector2(224, 224) and near(g.health, 92.0), "Heavy hit jolts visually, stays planted, deals 8")
+
+	# Hare's Stride sash flicks while walking and settles when movement stops.
+	g.equipped = "light"
+	g.clear_armor_fx()
+	g.player_moving = true
+	g.player_phase = 1.5
+	g.update_armor_fx(0.1)
+	check(g.sash_swing > 0.5, "Sash flicks back while walking")
+	g.update_player_pose(Vector2.ZERO)
+	for i in range(30): g.update_armor_fx(1.0 / 60.0)
+	check(g.sash_swing < 0.01, "Sash settles when the explorer stops or is blocked")
+
+	# Switching suits at a shrine clears the old suit's effects at once.
+	g.checkpoint = 0
+	g.player_pos = g.checkpoints[0]
+	g.inventory = ["weapon", "light", "medium"]
+	g.equipped = "medium"
+	g.spark_left = g.SPARK_TIME
+	g.selected_item = 1
+	g.equip_selected()
+	check(g.equipped == "light" and g.spark_left == 0.0, "Switching away from Storm Vessel ends its spark")
+	check(near(g.move_speed() / g.UNIT, 4.4) and near(g.armor_damage(20.0, false), 17.0), "New suit's stats apply immediately")
+
 	g.reset_game()
 	check(g.equipped == "light" and g.opened_chests.is_empty(), "Restart resets armor state")
 	print(JSON.stringify({"armor_checks": checks, "failures": failures}))
