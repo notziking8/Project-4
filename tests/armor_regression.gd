@@ -159,10 +159,10 @@ func run() -> void:
 	# Slot costs: light 2, medium 3, heavy 4.
 	check(g.item_cost("light") == 2 and g.item_cost("medium") == 3 and g.item_cost("heavy") == 4, "Armor slot costs")
 
-	# Suit artwork: 32x32 icons and 256x64 worn sheets (four 64x64 facings) per armor type.
+	# Suit artwork: 32x32 icons and pose-specific worn sheets per armor type.
 	for kind in g.ARMOR_KINDS:
 		check(g.ARMOR_ICONS[kind].get_size() == Vector2(32, 32), "%s icon is 32x32" % kind)
-		check(g.ARMOR_WORN[kind].get_size() == Vector2(256, 64), "%s worn sheet has four 64x64 facings" % kind)
+		check(g.ARMOR_WORN[kind].get_size() == Vector2(896, 256), "%s worn sheet has idle and six strides per facing for both aiming states" % kind)
 
 	# Storm Vessel spark: electrical hits only, and only in medium armor.
 	g.inventory = ["weapon", "light", "medium", "heavy"]
