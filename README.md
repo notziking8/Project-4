@@ -10,7 +10,7 @@ The GitHub Pages address is **https://notziking8.github.io/Project-4/** once Pag
 
 A repository administrator must open **Settings → Pages → Build and deployment → Source** and select **GitHub Actions**. Then run **Actions → Build and deploy game → Run workflow** on `main`. If a previous run built successfully but failed at Configure Pages, rerun that workflow after enabling Pages. A collaborator with push access alone cannot change this repository setting.
 
-Every push to `main` then builds, tests and deploys automatically through `.github/workflows/pages.yml`. The workflow pins Godot to `.godot-version`, verifies the official engine and template downloads with SHA-512, runs both gameplay regression suites, and uploads the browser build as a Pages artifact. No deployment credentials need to be added to the repository.
+Every push to `main` then builds, tests and deploys automatically through `.github/workflows/pages.yml`. The workflow pins Godot to `.godot-version`, verifies the official engine and template downloads with SHA-512, runs the gameplay regression suites (solo, Minotaur and armor), and uploads the browser build as a Pages artifact. No deployment credentials need to be added to the repository.
 
 The export uses Godot's single-threaded Web runtime, so GitHub Pages does not need cross-origin isolation headers. The production staging copy removes the local MCP autoload and editor plugin; the original editor project keeps its MCP integration. Generated exports and downloaded tools are excluded from Git.
 
@@ -64,3 +64,19 @@ Passage locking does not open walls or unlock bronze gates. To open a gate, clea
 See `POLISH_RULES.md` for the implementation contract and `tests/SOLO_VERIFICATION.md` for results. Run the regression suite with Godot's console executable: `--headless --path . --script res://tests/solo_regression.gd`. The earlier `grid_regression.gd` entry point delegates to this suite.
 
 Boss-specific checks: `--headless --path . --script res://tests/minotaur_regression.gd`. Results are recorded in `tests/MINOTAUR_VERIFICATION.md`.
+
+## Armor Types (Zion King)
+
+All armor numbers live in the `ARMOR` table at the top of `scripts/game.gd`.
+
+| Armor | Damage reduction | Speed | Special | Slots |
+| --- | --- | --- | --- | --- |
+| Light scout wraps | 15% | +10% (4.4 units/s) | — | 2 |
+| Medium bronze | 35% | normal (4.0 units/s) | extra 25% vs electrical spirits, after general reduction | 3 |
+| Heavy guardian | 60% | -15% (3.4 units/s) | no knockback | 4 |
+
+A 20-point hit deals 17 / 13 / 8 damage; a 20-point electrical hit in medium armor deals 9.75. Ordinary hits push 0.5 unit unless heavy armor is equipped. Electrical Light spirits crackle with cyan sparks.
+
+Armor sources: two remnants per sector (marked by bones), one sealed stone chest per sector that opens once every enemy in that sector is defeated, a one-time reward at each newly activated shrine, and elite drops. Pickups never auto-equip. Armor can be changed at any activated shrine outside combat; elsewhere the game explains why it can't. The HUD shows the equipped suit with protection and speed bars, and the ring under the explorer takes the suit's colour. On death, the equipped suit is kept and every backup suit is left at the death location.
+
+Armor checks: `--headless --path . --script res://tests/armor_regression.gd`.

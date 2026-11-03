@@ -86,7 +86,7 @@ func run() -> void:
 	g._unhandled_key_input(key)
 	check(not g.inventory_open, "Tab closes inventory")
 	g.reset_game()
-	check(g.used_slots() == 5 and g.pickups.size() == 9 and g.heal_cooldown == 0, "Restart restores initial inventory and world pickups")
+	check(g.used_slots() == 5 and g.pickups.size() == 9 + g.ARMOR_REMNANTS[0].size() + g.ARMOR_REMNANTS[1].size() + g.ARMOR_REMNANTS[2].size() and g.heal_cooldown == 0, "Restart restores initial inventory and world pickups")
 	print(JSON.stringify({"checks":checks,"failures":failures}))
 	g.queue_free()
 	await process_frame

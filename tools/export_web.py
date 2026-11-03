@@ -30,7 +30,7 @@ def prepare() -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default="godot", help="Godot executable or absolute path")
-    parser.add_argument("--test", action="store_true", help="Run both integration suites before export")
+    parser.add_argument("--test", action="store_true", help="Run all integration suites before export")
     args = parser.parse_args()
     version = (ROOT / ".godot-version").read_text().strip()
     actual = subprocess.check_output([args.godot, "--version"], text=True).strip()
@@ -40,7 +40,7 @@ def main() -> None:
     command = [args.godot, "--headless", "--path", str(stage)]
     subprocess.run(command + ["--editor", "--import", "--quit"], check=True)
     if args.test:
-        for suite in ("solo_regression", "minotaur_regression"):
+        for suite in ("solo_regression", "minotaur_regression", "inventory_regression", "armor_regression"):
             subprocess.run(command + ["--script", f"res://tests/{suite}.gd"], check=True)
     output = ROOT / "build/web"
     output.mkdir(parents=True, exist_ok=True)
