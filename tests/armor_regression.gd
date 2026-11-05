@@ -165,6 +165,21 @@ func run() -> void:
 		check(g.ARMOR_ICONS[kind].get_size() == Vector2(32, 32), "%s icon is 32x32" % kind)
 		check(g.ARMOR_WORN[kind].get_size() == Vector2(896, 256), "%s worn sheet has idle and six strides per facing for both aiming states" % kind)
 
+	# Every facing and stride visibly changes with the equipped suit.
+	# Pixel readback requires a real renderer; the headless dummy returns blank images.
+	if DisplayServer.get_name() != "headless":
+		for moving in [false, true]:
+			var light: Image = g.suit_image(g.EXPLORER_A_WALK if moving else g.EXPLORER_A_IDLE, "light")
+			var medium: Image = g.suit_image(g.EXPLORER_A_WALK if moving else g.EXPLORER_A_IDLE, "medium")
+			var heavy: Image = g.suit_image(g.EXPLORER_A_WALK if moving else g.EXPLORER_A_IDLE, "heavy")
+			for facing in range(4):
+				for frame in range(6 if moving else 1):
+					var changed := 0
+					for y in range(facing * 64, facing * 64 + 64):
+						for x in range(frame * 64, frame * 64 + 64):
+							if light.get_pixel(x, y) != medium.get_pixel(x, y) and medium.get_pixel(x, y) != heavy.get_pixel(x, y): changed += 1
+					check(changed > 40, "Distinct suit clothing: moving=%s facing=%d frame=%d" % [moving, facing, frame])
+
 	# Storm Vessel spark: electrical hits only, and only in medium armor.
 	g.inventory = ["weapon", "light", "medium", "heavy"]
 	g.equipped = "medium"

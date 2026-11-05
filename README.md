@@ -55,7 +55,7 @@ The world is substantially darker, with a warm light attached to the player, wal
 | Hold left click | Fire arrows |
 | F | Lock the aimed nearby passage in its **current open or closed state** for 10 seconds; then recharge for 5 seconds |
 | E / R | Collect / consume a healing relic |
-| Tab / X | Inventory / drop selected item at a shrine; click armor there to equip |
+| Tab / X | Inventory / drop selected item at a shrine; select an item, then Enter or the Equip button to equip |
 | M / G / H | Full map / toggle route trail / field guide |
 | Escape | Close an overlay or pause |
 

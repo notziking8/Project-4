@@ -27,6 +27,32 @@ func run() -> void:
 				count += 1
 				check(not g.maze.cells.has(Vector2i((pickup.pos / g.UNIT).floor())), "Relic on walkable floor")
 		check(count == 2, "Two relics per sector")
+	var original_pickups: Array = g.pickups.duplicate(true)
+	for kind in g.ARMOR_KINDS:
+		g.inventory = ["weapon", "light"]
+		g.pickups = [{"kind":kind, "pos":g.player_pos, "locked":false, "sector":-1}]
+		check(g.nearest_pickup() == 0 and "Pick up" in g.pickup_prompt(0), "Each armor has a pickup option: " + kind)
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		click.position = g.pickup_button_rect().get_center()
+		g._gui_input(click)
+		check(g.pickups.is_empty() and g.inventory.back() == kind, "Click collects armor: " + kind)
+	g.pickups = [
+		{"kind":"light", "pos":g.player_pos + Vector2(80, 0), "locked":false, "sector":-1},
+		{"kind":"heavy", "pos":g.player_pos + Vector2(20, 0), "locked":false, "sector":-1},
+	]
+	check(g.nearest_pickup() == 1 and "Heavy" in g.pickup_prompt(1), "Prompt targets nearest item regardless of array order")
+	g.inventory = ["weapon", "light"]
+	var collect := InputEventKey.new()
+	collect.keycode = KEY_E
+	collect.pressed = true
+	g._unhandled_key_input(collect)
+	check(g.inventory.back() == "heavy" and g.pickups.size() == 1, "E collects the prompted armor")
+	g.pickups[0].pos = g.player_pos + Vector2(100, 0)
+	check(g.nearest_pickup() == -1, "Out of reach items have no pickup target")
+	g.pickups = original_pickups
+	g.inventory = ["weapon", "light", "relic", "relic"]
 	g.inventory.append_array(["medium", "relic", "relic"])
 	check(g.used_slots() == 10, "Exact full capacity")
 	g.pickups = [{"kind":"heavy", "pos":g.player_pos, "locked":false, "sector":-1}]
@@ -60,6 +86,24 @@ func run() -> void:
 		enemy.pursuing = false
 	g.checkpoint = 1
 	g.player_pos = g.checkpoints[0]
+	g.inventory_open = true
+	var select := InputEventMouseButton.new()
+	select.button_index = MOUSE_BUTTON_LEFT
+	select.pressed = true
+	select.position = g.inventory_item_rect(2).get_center()
+	g._gui_input(select)
+	check(g.selected_item == 2 and g.equipped == "light", "Selecting backup armor does not equip it")
+	select.position = g.inventory_drop_rect().get_center()
+	g._gui_input(select)
+	check(not g.inventory.has("medium") and g.pickups.back().kind == "medium", "Drop button drops selected backup armor at shrine")
+	g.inventory.append("medium")
+	g.selected_item = 2
+	select.position = g.inventory_equip_rect().get_center()
+	g._gui_input(select)
+	check(g.equipped == "medium", "Equip button equips selected suit")
+	g.drop_selected()
+	check(g.inventory.has("medium") and "wearing" in g.message, "Equipped suit protection explains how to drop it")
+	g.inventory_open = false
 	g.equip_selected()
 	check(g.equipped == "medium", "Earlier activated checkpoint permits equip")
 	g.inventory.append("medium")

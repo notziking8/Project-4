@@ -151,8 +151,27 @@ var sash_swing := 0.0
 var spark_left := 0.0
 var jolt_left := 0.0
 var jolt_dir := Vector2.ZERO
+var suited_idle := {}
+var suited_walk := {}
+
+# Recolor the existing red cloth, preserving its shading, outline and skin pixels.
+# The hood remains visible from behind, where the small torso overlay is occluded.
+func suit_image(source: Texture2D, kind: String) -> Image:
+	var pixels := source.get_image()
+	if pixels.is_compressed(): pixels.decompress()
+	for y in range(pixels.get_height()):
+		for x in range(pixels.get_width()):
+			var color := pixels.get_pixel(x, y)
+			if color.a > 0.0 and color.r > color.g * 1.5 and color.r > color.b * 1.5 and color.g < color.r * 0.6:
+				var cloth: Color = ARMOR[kind].tint * (color.r / 0.65)
+				cloth.a = color.a
+				pixels.set_pixel(x, y, cloth)
+	return pixels
 
 func _ready() -> void:
+	for kind in ARMOR_KINDS:
+		suited_idle[kind] = ImageTexture.create_from_image(suit_image(EXPLORER_A_IDLE, kind))
+		suited_walk[kind] = ImageTexture.create_from_image(suit_image(EXPLORER_A_WALK, kind))
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var interface_material := CanvasItemMaterial.new()
 	interface_material.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
@@ -380,7 +399,7 @@ func update_game(delta: float) -> void:
 	var hand := player_pos + Vector2(0,-23)
 	var mouse := screen_to_world(get_local_mouse_position())
 	if hand.distance_to(mouse) > 10.0: aim = (mouse-hand).normalized()
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not inventory_open: shoot()
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not inventory_open and not pickup_button_hovered(): shoot()
 	update_arrows(delta)
 	route_clock -= delta
 	if route_clock <= 0.0:
@@ -797,27 +816,41 @@ func used_slots() -> int:
 	for item in inventory: result += item_cost(item)
 	return result
 
-func pick_up() -> void:
-	if mode != "playing" or health <= 0.0: return
-	var player: Vector2 = player_pos
+func nearest_pickup() -> int:
 	var best := -1
 	var best_distance := 92.0
-	var sealed_nearby := false
 	for i in range(pickups.size()):
 		var pickup: Dictionary = pickups[i]
-		var distance := player.distance_to(pickup["pos"])
-		if pickup["locked"] and not sector_clear(pickup["sector"]):
-			if distance < best_distance: sealed_nearby = true
-			continue
+		if pickup["locked"] and not sector_clear(pickup["sector"]): continue
+		var distance := player_pos.distance_to(pickup["pos"])
 		if distance < best_distance:
 			best = i
 			best_distance = distance
+	return best
+
+func pickup_button_rect() -> Rect2:
+	return Rect2(size.x * 0.5 - 230, size.y - 150, 460, 44)
+
+func pickup_button_hovered() -> bool:
+	return nearest_pickup() >= 0 and pickup_button_rect().has_point(get_local_mouse_position())
+
+func pickup_prompt(index: int) -> String:
+	var kind: String = pickups[index]["kind"]
+	var item_name := "%s armor" % kind.capitalize() if kind in ARMOR_KINDS else kind.capitalize()
+	return "E - Pick up %s" % item_name
+
+func pick_up() -> void:
+	if mode != "playing" or health <= 0.0 or help_open or map_open: return
+	var best := nearest_pickup()
 	if best < 0:
-		if sealed_nearby: show_message("The stone chest is sealed. Defeat every spirit in this sector.")
+		for pickup in pickups:
+			if pickup["locked"] and player_pos.distance_to(pickup["pos"]) < 92.0:
+				show_message("The stone chest is sealed. Defeat every spirit in this sector.")
+				break
 		return
 	var kind: String = pickups[best]["kind"]
 	if used_slots() + item_cost(kind) > INVENTORY_CAPACITY:
-		show_message("The satchel is full.")
+		show_message("Need %d free slots. At a shrine, use Tab and X to drop spare items." % item_cost(kind))
 		return
 	inventory.append(kind)
 	if pickups[best].get("chest", false): opened_chests.append(pickups[best]["pos"])
@@ -858,12 +891,27 @@ func equip_selected() -> void:
 	show_message("%s armor equipped: %s." % [kind.capitalize(), armor_stats().name])
 
 func drop_selected() -> void:
-	if not at_active_shrine() or selected_item < 0 or selected_item >= inventory.size(): return
+	if mode != "playing" or health <= 0.0: return
+	if selected_item < 0 or selected_item >= inventory.size():
+		show_message("Select an item in your inventory first.")
+		return
+	if not near_activated_shrine():
+		show_message("Drop items at an activated shrine.")
+		return
+	if combat_active():
+		show_message("Not during combat. Lose your pursuers, then drop items.")
+		return
 	var kind: String = inventory[selected_item]
-	if selected_item == inventory.find(equipped) or (kind == "weapon" and inventory.count("weapon") <= 1): return
+	if selected_item == inventory.find(equipped):
+		show_message("Equip another suit before dropping the armor you are wearing.")
+		return
+	if kind == "weapon" and inventory.count("weapon") <= 1:
+		show_message("You need to keep your bow.")
+		return
 	pickups.append({"kind": kind, "pos": player_pos, "locked": false, "sector": -1})
 	inventory.remove_at(selected_item)
 	selected_item = -1
+	show_message("Dropped %s." % kind.capitalize())
 
 func show_message(text: String) -> void:
 	message = text
@@ -901,6 +949,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_TAB:
 			inventory_open = not inventory_open
 			get_viewport().set_input_as_handled()
+		KEY_ENTER:
+			if inventory_open and not help_open and not map_open: equip_selected()
 		KEY_X:
 			if inventory_open and not help_open and not map_open: drop_selected()
 
@@ -918,11 +968,18 @@ func _gui_input(event: InputEvent) -> void:
 	elif mode == "victory": reset_game()
 	elif mode == "playing":
 		if help_open or map_open: return
-		if inventory_open and Rect2(size.x - 330, 98, 300, 460).has_point(p):
+		if nearest_pickup() >= 0 and pickup_button_rect().has_point(p):
+			pick_up()
+			accept_event()
+			return
+		if inventory_open and Rect2(size.x - 330, 98, 300, 540).has_point(p):
+			if inventory_equip_rect().has_point(p):
+				equip_selected()
+			elif inventory_drop_rect().has_point(p):
+				drop_selected()
 			for index in range(inventory.size()):
 				if inventory_item_rect(index).has_point(p):
 					selected_item = index
-					equip_selected()
 					break
 		elif not inventory_open: shoot()
 
@@ -1093,7 +1150,7 @@ func draw_enemy(enemy: Dictionary) -> void:
 
 func draw_player() -> void:
 	var pos := player_pos.round()
-	var texture: Texture2D = EXPLORER_A_WALK if player_moving else EXPLORER_A_IDLE
+	var texture: Texture2D = suited_walk[equipped] if player_moving else suited_idle[equipped]
 	var frame := posmod(int(player_phase),6) if player_moving else 0
 	var source := Rect2(frame*64,player_facing*64,64,64)
 	draw_set_transform((size*0.5-camera).round()+pos,0,Vector2(1,0.35))
@@ -1295,7 +1352,7 @@ func draw_help() -> void:
 		"F locks the passage under your cursor in its CURRENT state for 10 seconds. Keep an open route open, or keep a closed route closed. Aim within three tiles. Cyan sockets show the lock; it then recharges for 5 seconds.",
 		"Follow the gold trail and the live directions at the top. M opens the full map. G toggles the trail. Red map marks your current objective; gold marks shrines; cyan marks you.",
 		"WASD moves. Aim at a spirit's body and hold left click to fire arrows from the bow. Spirits investigate noise, pursue through passages and search where they last saw you. Move out of red attack rings.",
-		"E collects items. R consumes a healing relic. Tab opens inventory: click armor to equip, or press X to drop the selected item, at an activated shrine outside combat. H closes this guide. Escape pauses.",
+		"E collects items. R consumes a healing relic. Tab opens inventory: select an item, then Enter to equip or X to drop it, at an activated shrine outside combat. H closes this guide. Escape pauses.",
 		"Armor: Light (Hare's Stride) cuts damage 15% and adds 10% speed. Medium (Storm Vessel) cuts 35% and resists crackling electric spirits. Heavy (Bull's Stance) cuts 60% and stops knockback but slows you 15%. Each shrine grants one suit; sealed chests open when their sector is cleared."
 	]
 	for i in range(paragraphs.size()): wrapped_label(paragraphs[i],origin+Vector2(0,44+i*70),880,17,PALE,3)
@@ -1353,20 +1410,28 @@ func draw_hud() -> void:
 			label("Minotaur", Vector2(size.x * 0.5 - 48, size.y - 68), 22, RED)
 			draw_rect(Rect2(size.x * 0.5 - 145, size.y - 54, 290, 10), Color("48505e"))
 			draw_rect(Rect2(size.x * 0.5 - 145, size.y - 54, 290 * enemy["hp"] / 100.0, 10), RED)
-	if mode == "playing":
-		var world_mouse := screen_to_world(get_local_mouse_position())
-		for pickup in pickups:
-			if not pickup["locked"] and player_pos.distance_to(pickup["pos"]) < 90:
-				var screen_pos: Vector2 = pickup["pos"] + (size * 0.5 - camera).round()
-				draw_icon(pickup["kind"], screen_pos + Vector2(0, -39), 0.55)
-				break
+	if mode == "playing" and health > 0.0 and not help_open and not map_open:
+		var target := nearest_pickup()
+		if target >= 0:
+			var rect := pickup_button_rect()
+			button(pickup_prompt(target), rect.position, rect.size.x, rect.size.y)
+			var kind: String = pickups[target]["kind"]
+			var free_slots := INVENTORY_CAPACITY - used_slots()
+			if free_slots < item_cost(kind):
+				label("Bag full: needs %d slots (%d free)" % [item_cost(kind), free_slots], rect.position + Vector2(12, 64), 18, GOLD)
 
 func inventory_item_rect(index: int) -> Rect2:
 	return Rect2(size.x - 317.0 + float(index % 2) * 143.0, 139.0 + floori(float(index) / 2.0) * 44.0, 128, 38)
 
+func inventory_equip_rect() -> Rect2:
+	return Rect2(size.x - 317, 536, 128, 40)
+
+func inventory_drop_rect() -> Rect2:
+	return Rect2(size.x - 174, 536, 128, 40)
+
 func draw_inventory() -> void:
 	var x := size.x - 330.0
-	draw_rect(Rect2(x, 98, 300, 460), Color(0.04, 0.07, 0.12, 0.94))
+	draw_rect(Rect2(x, 98, 300, 540), Color(0.04, 0.07, 0.12, 0.94))
 	draw_rect(Rect2(x, 98, 300, 3), GOLD)
 	label("Inventory", Vector2(x + 20, 129), 24, GOLD)
 	for i in range(inventory.size()):
@@ -1374,6 +1439,7 @@ func draw_inventory() -> void:
 		var item_x := x + 38.0 + float(i % 2) * 143.0
 		if i == selected_item: draw_rect(inventory_item_rect(i), Color(0.28, 0.4, 0.48, 0.55))
 		draw_icon(inventory[i], Vector2(item_x, y), 0.55)
+		label(str(inventory[i]).capitalize(), Vector2(item_x + 20, y + 5), 13)
 		if i == inventory.find(equipped) or i == inventory.find("weapon"): draw_arc(Vector2(item_x, y), 17, 0, TAU, 20, GOLD, 2)
 	# The fixed legend is the only textual equipment list.
 	var legend_y := 389.0
@@ -1382,6 +1448,11 @@ func draw_inventory() -> void:
 	for i in range(legend.size()):
 		draw_icon(kinds[i], Vector2(x + 33, legend_y + i * 29), 0.38)
 		label(legend[i], Vector2(x + 56, legend_y + 6 + i * 29), 15)
+
+	button("Equip", inventory_equip_rect().position, 128, 40)
+	button("Drop [X]", inventory_drop_rect().position, 128, 40)
+	label("Wearing: %s" % equipped.capitalize(), Vector2(x + 18, 599), 16, GOLD)
+	label("Enter: equip | X: drop selected item.", Vector2(x + 18, 622), 15)
 
 func draw_menu() -> void:
 	var center := size * 0.5
@@ -1395,7 +1466,7 @@ func draw_menu() -> void:
 	draw_line(center + Vector2(0, -98), center + Vector2(0, -40), RED, 8)
 	if mode == "controls":
 		label("Controls", center + Vector2(-92, -193), 36, GOLD)
-		var controls := ["Move: W A S D", "Aim: Mouse", "Fire: Left Click", "Pick up: E", "Lock nearby passage for 10 seconds: F", "Heal: R", "Inventory: Tab", "Map: M | Field guide: H | Route: G", "At shrine, select equipment: Left Click", "At shrine, drop selected item: X", "Pause: Escape"]
+		var controls := ["Move: W A S D", "Aim: Mouse", "Fire: Left Click", "Pick up: E", "Lock nearby passage for 10 seconds: F", "Heal: R", "Inventory: Tab", "Map: M | Field guide: H | Route: G", "Select item: Left Click | Equip: Enter", "At shrine, drop selected item: X", "Pause: Escape"]
 		for i in range(controls.size()): label(controls[i], center + Vector2(-185, -155 + i * 32), 18)
 		button("Back", center + Vector2(-135, 215), 270, 48)
 		return
