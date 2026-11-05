@@ -37,7 +37,7 @@ const ICON_ATLAS := preload("res://assets/art/ui/item_icons.png")
 # the 4-unit/second base speed. knockback: whether ordinary hits push 0.5 unit.
 const ARMOR_KINDS := ["light", "medium", "heavy"]
 const ARMOR := {
-	"light": {"name": "Hare's Stride", "reduction": 0.15, "electric_resist": 0.0, "speed": 1.10, "knockback": true, "tint": Color("a9c3a0")},
+	"light": {"name": "Hare's Stride", "reduction": 0.15, "electric_resist": 0.0, "speed": 4, "knockback": true, "tint": Color("a9c3a0")},
 	"medium": {"name": "Storm Vessel", "reduction": 0.35, "electric_resist": 0.25, "speed": 1.00, "knockback": true, "tint": Color("9fb6cc")},
 	"heavy": {"name": "Bull's Stance", "reduction": 0.60, "electric_resist": 0.0, "speed": 0.85, "knockback": false, "tint": Color("d9a85c")},
 }
