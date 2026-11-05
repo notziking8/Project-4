@@ -49,7 +49,7 @@ func run() -> void:
 	check(near(g.health, 90.25), "Fractional health retained after a 9.75 hit")
 
 	# Movement speed in Godot units per second (64 px = 1 unit).
-	var expected_speed := {"light": 4.4, "medium": 4.0, "heavy": 3.4}
+	var expected_speed := {"light": 6.0, "medium": 4.0, "heavy": 3.4}
 	for kind in expected_speed:
 		g.equipped = kind
 		check(near(g.move_speed() / g.UNIT, expected_speed[kind]), "%s armor speed is %s units/s" % [kind, expected_speed[kind]])
@@ -222,7 +222,7 @@ func run() -> void:
 	g.selected_item = 1
 	g.equip_selected()
 	check(g.equipped == "light" and g.spark_left == 0.0, "Switching away from Storm Vessel ends its spark")
-	check(near(g.move_speed() / g.UNIT, 4.4) and near(g.armor_damage(20.0, false), 17.0), "New suit's stats apply immediately")
+	check(near(g.move_speed() / g.UNIT, 6.0) and near(g.armor_damage(20.0, false), 17.0), "New suit's stats apply immediately")
 
 	g.reset_game()
 	check(g.equipped == "light" and g.opened_chests.is_empty(), "Restart resets armor state")

@@ -37,7 +37,7 @@ const ICON_ATLAS := preload("res://assets/art/ui/item_icons.png")
 # the 4-unit/second base speed. knockback: whether ordinary hits push 0.5 unit.
 const ARMOR_KINDS := ["light", "medium", "heavy"]
 const ARMOR := {
-	"light": {"name": "Hare's Stride", "reduction": 0.15, "electric_resist": 0.0, "speed": 1.10, "knockback": true, "tint": Color("a9c3a0")},
+	"light": {"name": "Hare's Stride", "reduction": 0.15, "electric_resist": 0.0, "speed": 1.50, "knockback": true, "tint": Color("a9c3a0")},
 	"medium": {"name": "Storm Vessel", "reduction": 0.35, "electric_resist": 0.25, "speed": 1.00, "knockback": true, "tint": Color("9fb6cc")},
 	"heavy": {"name": "Bull's Stance", "reduction": 0.60, "electric_resist": 0.0, "speed": 0.85, "knockback": false, "tint": Color("d9a85c")},
 }
@@ -545,7 +545,7 @@ func armor_stats(kind: String = "") -> Dictionary:
 	return ARMOR.get(kind, ARMOR["light"])
 
 func move_speed() -> float:
-	# Base 4 units/second: light 4.4, medium 4.0, heavy 3.4.
+	# Base 4 units/second: light 6.0, medium 4.0, heavy 3.4.
 	return BASE_SPEED_UNITS * float(armor_stats().speed) * UNIT
 
 func armor_damage(base: float, electrical: bool) -> float:
@@ -1353,7 +1353,7 @@ func draw_help() -> void:
 		"Follow the gold trail and the live directions at the top. M opens the full map. G toggles the trail. Red map marks your current objective; gold marks shrines; cyan marks you.",
 		"WASD moves. Aim at a spirit's body and hold left click to fire arrows from the bow. Spirits investigate noise, pursue through passages and search where they last saw you. Move out of red attack rings.",
 		"E collects items. R consumes a healing relic. Tab opens inventory: select an item, then Enter to equip or X to drop it, at an activated shrine outside combat. H closes this guide. Escape pauses.",
-		"Armor: Light (Hare's Stride) cuts damage 15% and adds 10% speed. Medium (Storm Vessel) cuts 35% and resists crackling electric spirits. Heavy (Bull's Stance) cuts 60% and stops knockback but slows you 15%. Each shrine grants one suit; sealed chests open when their sector is cleared."
+		"Armor: Light (Hare's Stride) cuts damage 15% and adds 50% speed. Medium (Storm Vessel) cuts 35% and resists crackling electric spirits. Heavy (Bull's Stance) cuts 60% and stops knockback but slows you 15%. Each shrine grants one suit; sealed chests open when their sector is cleared."
 	]
 	for i in range(paragraphs.size()): wrapped_label(paragraphs[i],origin+Vector2(0,44+i*70),880,17,PALE,3)
 
@@ -1388,7 +1388,7 @@ func draw_hud() -> void:
 	draw_rect(Rect2(230, 24, 30, 4), Color("465260"))
 	draw_rect(Rect2(230, 24, 30.0 * float(armor_stats().reduction) / 0.6, 4), armor_stats().tint)
 	draw_rect(Rect2(230, 32, 30, 4), Color("465260"))
-	draw_rect(Rect2(230, 32, 30.0 * (float(armor_stats().speed) - 0.75) / 0.4, 4), PALE)
+	draw_rect(Rect2(230, 32, 30.0 * (float(armor_stats().speed) - 0.75) / 0.75, 4), PALE)
 	if near_activated_shrine() and mode == "playing":
 		draw_arc(Vector2(286, 34), 18, 0, TAU, 20, Color(CYAN, 0.5 + 0.5 * sin(anim_clock * 4.0)), 1.5)
 	label("Health", Vector2(34, 69), 16)

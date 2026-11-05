@@ -71,7 +71,7 @@ All armor numbers live in the `ARMOR` table at the top of `scripts/game.gd`.
 
 | Armor | Damage reduction | Speed | Special | Slots |
 | --- | --- | --- | --- | --- |
-| Light scout wraps | 15% | +10% (4.4 units/s) | — | 2 |
+| Light scout wraps | 15% | +50% (6.0 units/s) | — | 2 |
 | Medium bronze | 35% | normal (4.0 units/s) | extra 25% vs electrical spirits, after general reduction | 3 |
 | Heavy guardian | 60% | -15% (3.4 units/s) | no knockback | 4 |
 
